@@ -6,8 +6,6 @@ This repository contains the SQL queries and documentation for the Logistics Ord
 
 The dashboard tracks package movements from order initiation to delivery, highlighting key performance indicators (KPIs) such as pickup rates, transit volumes, and delivery success. It also identifies exceptions like unpicked, canceled, and returned orders to facilitate prompt issue resolution.
 
-![Dashboard Overview](images/dashboard_overview.png)
-
 For a comprehensive project description, visit the [project page](https://www.aditoworks.my.id/portfolio/logistics-order-journey-scorecards).
 
 ## 🧩 Key Challenges
