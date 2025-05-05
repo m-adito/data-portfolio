@@ -27,6 +27,6 @@ WHEN NOT MATCHED THEN
 ## Real Cost Comparison
 To show the impact, here’s a simulated comparison between my previous approach and the optimized one:
 
-![Comparison](simulation.png)
+![Comparison](images/cost-comparison.png)
 
 Cost Saving: ~Rp 1.93 million per month, or 99% reduction in query cost. And thats only the cost of one datamart ETL.
