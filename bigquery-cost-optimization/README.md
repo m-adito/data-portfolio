@@ -22,3 +22,9 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
   INSERT (order_id, status, updated_at)
   VALUES (s.order_id, s.status, s.updated_at)
+```
+
+## Real Cost Comparison
+To show the impact, here’s a simulated comparison between my previous approach and the optimized one:
+![Image description](ttps://lh4.googleusercontent.com/d6XpPf_HQxFM5LLLyCD94tMYoSPjUzGoS4KSBcqGHRk-5RC7J52DEbBb6pDznlg-UaOxaE5pANJvEua5IKpA7LixN_0EADLJI79XW0hUvTqfYAKi4jUl3G9Fws5uPBJSEg=w1280)
+Cost Saving: ~Rp 1.93 million per month, or 99% reduction in query cost. And thats only the cost of one datamart ETL.
