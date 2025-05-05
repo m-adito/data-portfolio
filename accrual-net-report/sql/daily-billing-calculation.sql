@@ -36,7 +36,7 @@ WITH
         LEFT JOIN `my_datamart.dim_source_finance_mapping` s2 ON s2.parent_shipping_cleint = rr.parent_client_name AND s2.type_option = 'vipSeller' AND rr.order_source = '00'
         WHERE
             (s1.finance_source_category != 'E-Commerce' OR s2.finance_source_category != 'E-Commerce') -- Example: Excluding specific categories
-            AND DATE(rr.return_record_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'),INTERVAL 24 MONTH)
+            AND DATE(rr.return_record_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'),INTERVAL 1 DAY)
     ),
 
     shipment_cost_details AS (
@@ -113,7 +113,7 @@ WITH
             ww.sender_name
         FROM
             `my_datawarehouse.fact_waybill_details` ww
-        LEFT JOIN `my_datawarehouse.fact_orders` oo ON ww.waybill_no = oo.waybill_no AND DATE(oo.input_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'),INTERVAL 24 MONTH) AND oo.order_no NOT IN ('EXAMPLE_ORDER_EXCLUSION') -- Anonymized exclusion
+        LEFT JOIN `my_datawarehouse.fact_orders` oo ON ww.waybill_no = oo.waybill_no AND DATE(oo.input_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'),INTERVAL 1 DAY) AND oo.order_no NOT IN ('EXAMPLE_ORDER_EXCLUSION') -- Anonymized exclusion
         LEFT JOIN return_shipments rr ON ww.waybill_no = rr.waybill_no AND ww.return_waybill_no = rr.return_waybill_no
         LEFT JOIN `my_datawarehouse.dim_system_codes` t1 ON t1.option_value = ww.waybill_source AND t1.type_option = 'waybillSource'
         LEFT JOIN `my_datawarehouse.dim_system_codes` t2 ON t2.option_value = ww.express_type AND t2.type_option = 'expressType'
@@ -122,7 +122,7 @@ WITH
         LEFT JOIN `my_datamart.dim_partnerA_express_weight_tiers` spx_w ON CAST(ww.item_actual_weight AS NUMERIC) >= spx_w.Bottom AND CAST(ww.item_actual_weight AS NUMERIC) <= spx_w.Up AND ww.waybill_source = '101'
         LEFT JOIN `my_datamart.dim_partnerA_crossborder_discounts` cb ON cb.lookup_destination = CONCAT(ww.recipient_city_name,ww.recipient_district_name) AND cb.origin = ww.sender_city_name AND ww.waybill_source = '114'
         LEFT JOIN `my_datamart.dim_partnerA_crossborder_weight_tiers` cb_w ON CAST(ww.item_actual_weight AS NUMERIC) >= cb_w.Bottom AND CAST(ww.item_actual_weight AS NUMERIC) <= cb_w.Up AND ww.waybill_source = '114'
-        LEFT JOIN `my_datawarehouse.fact_partnerB_orders` tokorder ON tokorder.waybill_number = ww.waybill_no AND ww.waybill_source = '756' AND DATE(tokorder.create_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 6 MONTH)
+        LEFT JOIN `my_datawarehouse.fact_partnerB_orders` tokorder ON tokorder.waybill_number = ww.waybill_no AND ww.waybill_source = '756' AND DATE(tokorder.create_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 1 DAY)
         LEFT JOIN `my_datamart.dim_partnerB_weight_tiers` kr_w ON CAST(ww.item_actual_weight AS NUMERIC) >= kr_w.Bottom AND CAST(ww.item_actual_weight AS NUMERIC) <= kr_w.Up AND ww.waybill_source = '756'
         LEFT JOIN `my_datamart.dim_partnerB_new_pricing_scheme` tts1 ON oo.sender_city_name = tts1.Origin_City AND oo.recipient_city_name = tts1.Dest_City AND oo.order_source = '756'
         LEFT JOIN `my_datamart.dim_partnerB_special_discounts` sw ON sw.origin_city = ww.sender_city_name AND sw.dest_city = ww.recipient_city_name AND sw.dest_district = ww.recipient_district_name AND ww.key_account_name = 'PartnerB_SpecialService' -- Anonymized specific customer
@@ -130,7 +130,7 @@ WITH
         LEFT JOIN `my_datamart.dim_partnerC_discounts` bb ON bb.area = bc.master_agent AND bb.express_type = t2.option_name AND ww.waybill_source IN ('116', '801')
         LEFT JOIN `my_datamart.dim_partnerD_discounts` zal ON zal.dest_city = ww.recipient_city_name AND zal.dest_district = ww.recipient_district_name AND zal.origin_city = ww.sender_city_name AND zal.waybill_source = t1.option_name AND ww.waybill_source IN ('803', '804')
         LEFT JOIN standard_discount_rates price ON price.shipping_client_id = ww.vip_customer_id AND ww.sender_city_id = price.sender_location_id AND ww.recipient_district_id = price.recipient_location_id AND ww.express_type = price.express_type
-        LEFT JOIN `my_datawarehouse.agg_daily_netoff_report` t4 ON t4.waybill_no = ww.waybill_no AND DATE(t4.created_at) >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 6 MONTH)
+        LEFT JOIN `my_datawarehouse.agg_daily_netoff_report` t4 ON t4.waybill_no = ww.waybill_no AND DATE(t4.created_at) >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 1 DAY)
         LEFT JOIN `my_datamart.dim_api_platform_discounts` api ON api.option_value = IF(ww.waybill_source = '835', '829', ww.waybill_source) AND api.shipping_client IS NOT NULL AND ww.waybill_source NOT IN ('813') -- Excluding specific source
         LEFT JOIN wallet_payments wallet ON wallet.waybill_no = ww.waybill_no
         WHERE
@@ -161,4 +161,4 @@ SELECT
     ww.chargeable_weight,
     ww.sender_name
 FROM shipment_cost_details ww
-LEFT JOIN `my_datawarehouse.fact_waybill_fees` sf ON sf.waybill_no = ww.waybill_no AND DATE(sf.create_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 1 MONTH) -- Join for fallback fee info
+LEFT JOIN `my_datawarehouse.fact_waybill_fees` sf ON sf.waybill_no = ww.waybill_no AND DATE(sf.create_time,'Asia/Jakarta') >= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 1 DAY) -- Join for fallback fee info
