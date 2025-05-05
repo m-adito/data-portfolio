@@ -1,125 +1,125 @@
--- CREATE TABLE `project.dataset.final_dashboard_table`
+-- CREATE TABLE `project.dataset.final_table`
 -- PARTITION BY DATE(event_time)
--- CLUSTER BY tracking_no, source_branch_name, target_branch_name
+-- CLUSTER BY tracking_id, source_hub, destination_hub
 -- AS
 
-WITH source_schedule AS (
+WITH src_data AS (
     SELECT * FROM (
         SELECT DISTINCT 
-            a.tracking_no, 
+            a.tracking_id, 
             a.partner_name, 
-            a.location_code, 
-            a.location_address, 
-            b.partner_category, 
-            a.created_at,
-            c.region_province, 
-            a.location_name,
-            c.region_city,
-            c.region_district
-        FROM `project.dataset.schedule_source` a
-        LEFT JOIN `project.dataset.location_master` b ON b.code = a.location_code
-        LEFT JOIN `project.dataset.region_mapping` c ON c.district_id = b.region_id
+            a.loc_code, 
+            a.loc_address, 
+            b.partner_type, 
+            a.created_time,
+            c.province, 
+            a.loc_name,
+            c.city,
+            c.district
+        FROM `project.dataset.source_table` a
+        LEFT JOIN `project.dataset.location_ref` b ON b.code = a.loc_code
+        LEFT JOIN `project.dataset.region_ref` c ON c.district_id = b.region_id
     )
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY tracking_no ORDER BY created_at DESC)=1
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY tracking_id ORDER BY created_time DESC)=1
 )
 
-, dropoff_events AS (
+, dropoff_evt AS (
     SELECT
-        x.tracking_no, 
-        x.source_branch_name, 
+        x.tracking_id, 
+        x.source_hub, 
         DATETIME(x.event_time,'Asia/Jakarta') AS event_time
-    FROM `project.dataset.dropoff_events_table` x
+    FROM `project.dataset.dropoff_table` x
     WHERE DATE(x.event_time,'Asia/Jakarta') >= DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH)
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY x.tracking_no ORDER BY x.event_time ASC)=1
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY x.tracking_id ORDER BY x.event_time ASC)=1
 )
 
-, arrival_events AS (
+, arrival_evt AS (
     SELECT
-        x.tracking_no, 
-        x.source_branch_name, 
+        x.tracking_id, 
+        x.source_hub, 
         DATETIME(x.event_time,'Asia/Jakarta') AS event_time
-    FROM `project.dataset.shipment_events_table` x
+    FROM `project.dataset.event_table` x
     WHERE DATE(x.event_time,'Asia/Jakarta') >= DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH)
-        AND SUBSTR(x.source_branch_name,1,2) IN ('MH','DC')
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY x.tracking_no ORDER BY x.event_time ASC)=1
+        AND SUBSTR(x.source_hub,1,2) IN ('MH','DC')
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY x.tracking_id ORDER BY x.event_time ASC)=1
 )
 
-, shipment_summary AS (
-    SELECT tracking_no, event_type, source_branch_name, next_branch_name AS next_location_name, event_time
-    FROM `project.dataset.shipment_events_table`
-    WHERE DATE(event_time, 'Asia/Jakarta') >= DATE(DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH))
-        AND event_type IN ('61', '02', '04', '09')
+, summary_evt AS (
+    SELECT tracking_id, evt_type, source_hub, next_hub AS next_location, event_time
+    FROM `project.dataset.event_table`
+    WHERE DATE(event_time, 'Asia/Jakarta') >= DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH)
+        AND evt_type IN ('61', '02', '04', '09')
     QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY tracking_no
+        PARTITION BY tracking_id
         ORDER BY CASE
-                    WHEN event_type = '61' THEN 0
+                    WHEN evt_type = '61' THEN 0
                     ELSE 1
                 END,
                 event_time ASC
     ) = 1
 )
 
-, detail_view AS (
+, main_view AS (
     SELECT
-        a.tracking_no,
+        a.tracking_id,
         b.order_id,
-        b.external_order_id,
-        DATETIME(b.ordered_at, 'Asia/Jakarta') AS ordered_at,
+        b.ext_order_id,
+        DATETIME(b.order_time, 'Asia/Jakarta') AS order_time,
         b.sender_name,
-        b.sender_phone,
-        opt1.option_value AS order_channel,
-        opt2.option_value AS service_category,
-        a.region_province AS sender_province,
-        a.region_city AS sender_city,
-        a.region_district AS sender_district,
-        DATETIME(a.created_at, 'Asia/Jakarta') AS event_time,
-        a.location_name AS source_branch_name,
-        a.location_address,
-        a.location_code,
-        a.partner_category,
+        b.sender_contact,
+        o1.val AS channel,
+        o2.val AS service_type,
+        a.province AS sender_province,
+        a.city AS sender_city,
+        a.district AS sender_district,
+        DATETIME(a.created_time, 'Asia/Jakarta') AS event_time,
+        a.loc_name AS source_hub,
+        a.loc_address,
+        a.loc_code,
+        a.partner_type,
         CASE 
-            WHEN b.handover_partner = 'THIRDPARTY' THEN b.handover_partner_name
+            WHEN b.handled_by = 'THIRDPARTY' THEN b.partner_handler
             ELSE 'DEFAULT'
-        END AS final_partner_name,
+        END AS final_partner,
         DATETIME(b.pickup_start, 'Asia/Jakarta') AS pickup_start,
         DATETIME(b.pickup_end, 'Asia/Jakarta') AS pickup_end,
-        IF(c.cancel_flag = '1', 'Canceled', opt3.option_value) AS order_status,
-        DATETIME(c.pickup_recorded_at, 'Asia/Jakarta') AS pickup_event_time,
-        IF(b.pickup_time IS NULL, b.target_branch, b.pickup_branch) AS pickup_target_branch,
-        IF(c.pickup_recorded_at IS NULL AND b.status <> '04', DATE_DIFF(CURRENT_DATE('Asia/Jakarta'),DATE(a.created_at, 'Asia/Jakarta'),DAY), NULL) AS aging_days,
+        IF(c.cancel_flag = '1', 'Canceled', o3.val) AS order_status,
+        DATETIME(c.pickup_logged, 'Asia/Jakarta') AS pickup_event_time,
+        IF(b.pickup_time IS NULL, b.target_hub, b.pickup_hub) AS pickup_target,
+        IF(c.pickup_logged IS NULL AND b.status <> '04', DATE_DIFF(CURRENT_DATE('Asia/Jakarta'),DATE(a.created_time, 'Asia/Jakarta'),DAY), NULL) AS backlog_days,
         CASE
-            WHEN IF(b.handover_partner = 'THIRDPARTY', b.handover_partner_name, a.partner_name) != 'DEFAULT' AND s.event_type = '61' THEN DATETIME(s.event_time,'Asia/Jakarta')
-            WHEN IF(b.handover_partner = 'THIRDPARTY', b.handover_partner_name, a.partner_name) = 'DEFAULT' AND s.event_type = '02' AND s.source_branch_name = b.pickup_branch THEN DATETIME(s.event_time,'Asia/Jakarta')
-            WHEN IF(b.handover_partner = 'THIRDPARTY', b.handover_partner_name, a.partner_name) = 'DEFAULT' AND s.event_type = '04' AND s.source_branch_name = b.pickup_branch THEN DATETIME(s.event_time,'Asia/Jakarta')
-            WHEN c.pod_event_time IS NOT NULL THEN DATETIME(c.pod_event_time,'Asia/Jakarta')
-        END AS delivery_event_time,
+            WHEN IF(b.handled_by = 'THIRDPARTY', b.partner_handler, a.partner_name) != 'DEFAULT' AND s.evt_type = '61' THEN DATETIME(s.event_time,'Asia/Jakarta')
+            WHEN IF(b.handled_by = 'THIRDPARTY', b.partner_handler, a.partner_name) = 'DEFAULT' AND s.evt_type = '02' AND s.source_hub = b.pickup_hub THEN DATETIME(s.event_time,'Asia/Jakarta')
+            WHEN IF(b.handled_by = 'THIRDPARTY', b.partner_handler, a.partner_name) = 'DEFAULT' AND s.evt_type = '04' AND s.source_hub = b.pickup_hub THEN DATETIME(s.event_time,'Asia/Jakarta')
+            WHEN c.pod_time IS NOT NULL THEN DATETIME(c.pod_time,'Asia/Jakarta')
+        END AS delivery_time,
         CASE
-            WHEN IF(b.handover_partner = 'THIRDPARTY', b.handover_partner_name, a.partner_name) != 'DEFAULT' AND s.event_type = '61' THEN 'Handover Completed'
-            WHEN IF(b.handover_partner = 'THIRDPARTY', b.handover_partner_name, a.partner_name) = 'DEFAULT' AND s.event_type = '04' THEN 'Dispatched'
-            WHEN c.pod_event_time IS NOT NULL THEN 'Delivered'
+            WHEN IF(b.handled_by = 'THIRDPARTY', b.partner_handler, a.partner_name) != 'DEFAULT' AND s.evt_type = '61' THEN 'Handover Complete'
+            WHEN IF(b.handled_by = 'THIRDPARTY', b.partner_handler, a.partner_name) = 'DEFAULT' AND s.evt_type = '04' THEN 'Dispatched'
+            WHEN c.pod_time IS NOT NULL THEN 'Delivered'
         END AS delivery_status,
-        DATETIME(c.pod_event_time, 'Asia/Jakarta') AS pod_event_time,
+        DATETIME(c.pod_time, 'Asia/Jakarta') AS pod_time,
         DATETIME(b.failed_pickup_time) AS failed_pickup_time,
-        opt4.failure_reason AS failed_pickup_reason,
-        opt5.option_value AS cancel_status,
-        CURRENT_DATETIME('Asia/Jakarta') AS data_updated_at,
-        d.event_time AS arrival_event_time,
-        e.event_time AS dropoff_event_time
-    FROM source_schedule a
-    LEFT JOIN `project.dataset.orders_table` b ON b.tracking_no = a.tracking_no
-        AND DATE(b.updated_at, 'Asia/Jakarta') >= DATE(DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -6 MONTH))
-    LEFT JOIN shipment_summary s ON s.tracking_no = a.tracking_no
-    LEFT JOIN `project.dataset.tracking_table` c ON c.tracking_no = a.tracking_no
-        AND DATE(c.updated_at, 'Asia/Jakarta') >= DATE(DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH))
-    LEFT JOIN `project.dataset.options_table` opt1 ON opt1.option_id = b.source_channel_id
-    LEFT JOIN `project.dataset.options_table` opt2 ON opt2.option_id = b.service_type_id
-    LEFT JOIN `project.dataset.options_table` opt3 ON opt3.option_id = b.order_status
-    LEFT JOIN `project.dataset.failure_reasons` opt4 ON opt4.reason_id = b.failed_pickup_reason_id
-    LEFT JOIN `project.dataset.options_table` opt5 ON opt5.option_id = c.cancel_flag
-    LEFT JOIN arrival_events d ON d.tracking_no = a.tracking_no
-    LEFT JOIN dropoff_events e ON e.tracking_no = a.tracking_no
+        o4.reason AS failed_reason,
+        o5.val AS cancel_status,
+        CURRENT_DATETIME('Asia/Jakarta') AS data_timestamp,
+        d.event_time AS arrival_time,
+        e.event_time AS dropoff_time
+    FROM src_data a
+    LEFT JOIN `project.dataset.orders` b ON b.tracking_id = a.tracking_id
+        AND DATE(b.updated_at, 'Asia/Jakarta') >= DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -6 MONTH)
+    LEFT JOIN summary_evt s ON s.tracking_id = a.tracking_id
+    LEFT JOIN `project.dataset.tracking` c ON c.tracking_id = a.tracking_id
+        AND DATE(c.updated_at, 'Asia/Jakarta') >= DATE_ADD(CURRENT_DATE('Asia/Jakarta'), INTERVAL -3 MONTH)
+    LEFT JOIN `project.dataset.options` o1 ON o1.option_id = b.channel_id
+    LEFT JOIN `project.dataset.options` o2 ON o2.option_id = b.service_id
+    LEFT JOIN `project.dataset.options` o3 ON o3.option_id = b.status_id
+    LEFT JOIN `project.dataset.failures` o4 ON o4.id = b.failed_reason_id
+    LEFT JOIN `project.dataset.options` o5 ON o5.option_id = c.cancel_flag
+    LEFT JOIN arrival_evt d ON d.tracking_id = a.tracking_id
+    LEFT JOIN dropoff_evt e ON e.tracking_id = a.tracking_id
 )
 
-SELECT * FROM detail_view
-WHERE partner_category IN ('SAT', 'SIL', 'MUI')
-QUALIFY ROW_NUMBER() OVER (PARTITION BY tracking_no ORDER BY event_time, delivery_event_time ASC)=1
+SELECT * FROM main_view
+WHERE partner_type IN ('A', 'B', 'C')
+QUALIFY ROW_NUMBER() OVER (PARTITION BY tracking_id ORDER BY event_time, delivery_time ASC)=1
